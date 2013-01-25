@@ -2,18 +2,21 @@
 
 #include <iostream>
 #include <string.h>
-#include <math.h>
-
+#include "ck_maths.h"
+#include <string>
+#include <stdlib.h>
 
 //////////////////////
 ////GLOBALS
 ///////////////////
 
 bool running;
-int windowWidth = 640;
-int windowHeight = 480;
+bool refresh = false;//make this true every time the refresh of screen is required
+int windowWidth = 500 ;
+int windowHeight = 500;
 float *pixel_data;
-
+int line_thickness = 1;
+//int *brush_buffer;
 int buf_x =-1; int buf_y =-1;
 
 // window close callback function
@@ -36,8 +39,10 @@ void drawLine(int x1, int y1, int x2, int y2);
 
 using namespace std;
 
-int main()
+int main(int argc, char *argv[])
 {
+
+    line_thickness = atoi(argv[1]);
 
     if(glfwInit() == GL_FALSE)
     {
@@ -74,13 +79,11 @@ int main()
     running = true;
     while(running)
     {    
-        glClearColor(0.0f, 1.0f, 1.0f, 1.0f);
-        
-        // terminate on escape 
-        if(glfwGetKey(GLFW_KEY_ESC))
+        if(refresh)
         {
-            running = false;
-        }
+            refresh = false;
+        glClearColor(0.0f, 1.0f, 1.0f, 1.0f);
+               
 
         // clear first
     glClear(GL_COLOR_BUFFER_BIT //| GL_DEPTH_BUFFER_BIT
@@ -90,6 +93,14 @@ int main()
         // ...
 
     glDrawPixels(windowWidth,windowHeight,GL_LUMINANCE,GL_FLOAT,pixel_data);
+
+};
+
+ // terminate on escape 
+        if(glfwGetKey(GLFW_KEY_ESC))
+        {
+            running = false;
+        }
 
         // check for errors
     GLenum error = glGetError();
@@ -144,27 +155,45 @@ void GLFWCALL mouseMove(int x, int y)
 
     if(glfwGetMouseButton(GLFW_MOUSE_BUTTON_LEFT))
     {
-        pixel_data[xyTO1d(x,windowHeight-y)] = 1;
-        
+        //pixel_data[xyTO1d(x,windowHeight-y)] = 1;
+refresh = true;
         if((buf_x != -1) && (buf_y !=-1))
-        drawLine(buf_x,windowHeight-buf_y,x,windowHeight-y);
-    buf_x = x; buf_y = y;
+            drawLine(buf_x,windowHeight-buf_y,x,windowHeight-y);
+        buf_x = x; buf_y = y;
 
-   }
-   else
-   {
-buf_x = -1;buf_y = -1;
-   }
+    }
+    else
+    {
+        buf_x = -1;buf_y = -1;
+    }
 
 
 }//mouseMove
 
 void drawLine(int x1, int y1, int x2, int y2)
 {
-    int length = sqrt((y2 - y1)*(y2 - y1) + (x2 - x1)*(x2 -x1));
+    int length = sqrt((float)((y2 - y1)*(y2 - y1) + (x2 - x1)*(x2 -x1)));
 
-    for(int i=0; i < length;i++)
+
+
+    for(int i=0; i < length;i++)//draw each pixel of line
     {
-pixel_data[xyTO1d((x2-x1)*i/length+x1,(y2-y1)*i/length+y1)] =  1;
+     int center_x = (x2 - x1)*((float)i/(float)length)+x1;
+     int center_y = (y2 - y1)*((float)i/(float)length)+y1;
+
+     pixel_data[xyTO1d(center_x,center_y)] =  1;
+
+     for(int pixel_x = center_x - (line_thickness - 1); pixel_x < center_x + (line_thickness - 1);pixel_x++)
+        for(int pixel_y = center_y - (line_thickness - 1); pixel_y < center_y + (line_thickness - 1);pixel_y++)
+        {
+            int x = pixel_x - center_x;
+            int y = pixel_y - center_y;
+
+            if(((x*x)+(y*y))<((line_thickness-1) * (line_thickness-1)))
+            {                
+                pixel_data[xyTO1d(pixel_x,pixel_y)] =  1;
+            }
+        }
+
     }
-}
+} 
