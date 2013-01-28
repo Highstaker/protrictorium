@@ -5,9 +5,7 @@ ADDITIONALS =
 SOURCE = $(wildcard *.cpp)
 DEST = $(patsubst %.cpp,%,$(SOURCE))
 
-all: $(DEST)
-
-%: %.cpp
+all: 
 	rm -f /mnt/ramtemp/$@
-	 $(CC) $< $(ADDITIONALS) -o /mnt/ramtemp/$@ $(LIBRARIES) $(INCLUDES)
+	 $(CC) main.cpp $(ADDITIONALS) -o /mnt/ramtemp/protrictorium $(LIBRARIES) $(INCLUDES)
 	 
