@@ -22,11 +22,14 @@ float *pixel_data_top;
 bool *bounds_x;
 bool *bounds_y;
 bool *bounds_z;
-int line_thickness = 1;
+int line_thickness = 5;
 int buf_x =-1; int buf_y =-1;
 int symmetry = 0;
 int cur_view = 0;
+int keyboard_reading_state = 0;
 bool eraser = false;
+bool bound_lock = false;
+bool row_filling_confirmation = false;
 //int bounds[3][2];
 
 /////////////////
@@ -39,9 +42,11 @@ void GLFWCALL mouseWheel(int pos);
 void GLFWCALL keyPress( int character, int action );
 
 void drawLine(int x1, int y1, int x2, int y2);
-//void scan_for_bounds();
+void scan_for_bounds(int,bool);
 void fill_row(float *array,int start, int end , bool vertical, float value);
-void check_bounds(int x, int y);
+//void check_bounds(int x, int y);
+void assign_pixel(int x, int y);
+void switch_to_view(int);
 
 //////////////////////
 /////////////FUNCTIONS
@@ -59,38 +64,7 @@ int xyTO1d(int x, int y)
 	return x + y * windowWidth;
 }
 
-void assign_pixel(int x, int y)
-{
 
-	float value = !eraser;
-
-	
-	//cerr << x<< '\t' << y << '\t' << xyTO1d(x,y) << endl;//debug
-	if ( (x < windowWidth) && (x >= 0) && (y >=0) && (y<windowHeight))
-	{
-
-		int pixelIndex = xyTO1d(x,y);
-		if(cur_view == 0)
-		{
-			pixel_data_front[pixelIndex] =  value;
-		}
-
-		if(cur_view == 1)
-		{
-			pixel_data_side[pixelIndex] =  value;
-		}
-
-		if(cur_view == 2)
-		{
-			pixel_data_top[pixelIndex] =  value;
-		}
-
-		check_bounds(x,y);
-	}
-
-	
-
-}
 
 
 
@@ -107,9 +81,12 @@ int main(int argc, char **argv)
 {
 
 	//bounds[2][0] = windowHeight; bounds[2][1] = - 1;
-	 bounds_z = new bool[windowHeight];
-	 memset(bounds_z,windowHeight,0);
-
+	bounds_x = new bool[windowHeight];
+	bounds_y = new bool[windowHeight];
+	bounds_z = new bool[windowHeight];
+	memset(bounds_x,windowHeight,0);
+	memset(bounds_y,windowHeight,0);
+	memset(bounds_z,windowHeight,0);
 	cerr << line_thickness << endl;//debug
 	for(int i=0;i<argc ;i++)//reading options
 	{
@@ -153,6 +130,7 @@ int main(int argc, char **argv)
 	pixel_data_side = new float[windowWidth * windowHeight];
 	pixel_data_top = new float[windowWidth * windowHeight];
 	
+	glfwSetWindowTitle("Protrictorium. Front view");
 
 	running = true;
 	while(running)
@@ -319,76 +297,213 @@ void drawLine(int x1, int y1, int x2, int y2)
 
 		void GLFWCALL keyPress( int character, int action )
 		{
-			refresh = true;
-			switch((char)character)
+			switch(keyboard_reading_state)
 			{
-				case 'x':
+
+				case 0:
 				{
-					symmetry = (symmetry ^ 2);
-					break;
-				}
+					refresh = true;
+					switch((char)character)
+					{
+						case 'f':
+						{
+							scan_for_bounds(cur_view,true);
+						}
 
-				case 'y':
-				{
-					symmetry = (symmetry ^ 4);
-					break;
-				}
+						case 'x':
+						{
+							symmetry = (symmetry ^ 2);
+							break;
+						}
 
-				case 'e':
-				{
-					eraser = !eraser;
-					break;
-				}
+						case 'y':
+						{
+							symmetry = (symmetry ^ 4);
+							break;
+						}
 
-				case '1':
-				{
-					cur_view = 0;
+						case 'l':
+						{
+							bound_lock = !bound_lock;
+							cout << "Boundary lock " << bound_lock << endl;
+							break;
+						}
 
-					break;
-				}
+						case 'e':
+						{
+							eraser = !eraser;
+							cout << "Eraser " << eraser << endl;
+							break;
+						}
 
-				case '2':
-				{		
-					cur_view = 1;
-		//void scan_for_bounds();
-					break;
-				}
+						case '1':
+						{
+							switch_to_view(0);
 
-				case '3':
-				{
-					cur_view = 2;
-					break;
-				}
+							break;
+						}
 
-				default: break;
+						case '2':
+						{		
+							switch_to_view(1);
+
+							break;
+						}
+
+						case '3':
+						{
+							switch_to_view(2);
+
+							break;
+						}
+
+						default: break;
 }//switch
 
 }
-
 /*
-void scan_for_bounds()
+case 1://await confirmation of row filling in destination viewport on row switch
 {
-	for(int i = 0; i< windowWidth; i++)
-		for(int j = 0; j < windowHeight; j++)
-		{
-			if(pixel_data_front[xyTO1d(i,j)])
-			{
-				fill_row(pixel_data_side,bounds[0][0],i,0,1);
-				bounds[0][0] = i;
-				break;break;
-			}
-		}
-
-	for(int i = windowWidth; i>=0; i--)
-		for(int j = 0; j < windowHeight; j++)
-			if(pixel_data_front[xyTO1d(i,j)])
-			{
-				fill_row(pixel_data_side,bounds[0][1],i,0,1);
-				bounds[0][1] = i;
-				break;break;
-			}
+if(character == 'y')
+	{row_filling_confirmation = true;}
+else
+	{row_filling_confirmation = false;}
 }
 */
+default: break;
+
+}//keyboard_reading_state switch
+
+}
+
+
+void scan_for_bounds(int cur_view, bool perform_filling)
+{
+	
+		switch(cur_view)
+	{
+		case 0:
+		{
+			for (int i = 0; i < windowWidth; i++)
+			{				
+				int sum = 0;
+				int sum2 = 0;
+				for(int j = 0; j < windowHeight; j++)
+				{
+					//cerr << i << " " << j<< endl;//debug
+					sum += pixel_data_front[xyTO1d(i,j)];
+					sum2 += pixel_data_front[xyTO1d(j,i)];
+					bounds_x[i] = true;
+				}
+				if (!sum && bounds_y[i])
+				{
+					bounds_y[i] = false;
+					if(perform_filling)fill_row(pixel_data_top,i,i,true,0);					
+				}
+				if(sum && !bounds_y[i])
+				{
+					bounds_y[i] = true;
+					if(perform_filling)fill_row(pixel_data_top,i,i,true,1);
+				}
+				if (!sum2 && bounds_z[i])
+				{
+					bounds_z[i] = false;
+					if(perform_filling)fill_row(pixel_data_side,i,i,false,0);
+				}
+				if (sum2 && !bounds_z[i])
+				{
+					bounds_z[i] = true;
+					if(perform_filling)fill_row(pixel_data_side,i,i,false,1);
+				}
+
+
+
+			}
+			break;
+		}
+
+		case 1:
+		{
+			for (int i = 0; i < windowWidth; i++)
+			{				
+				int sum = 0;
+				int sum2 = 0;
+				for(int j = 0; j < windowHeight; j++)
+				{
+					//cerr << i << " " << j<< endl;//debug
+					sum += pixel_data_side[xyTO1d(i,j)];
+					sum2 += pixel_data_side[xyTO1d(j,i)];
+					bounds_y[i] = true;
+				}
+				if (!sum && bounds_x[i])
+				{
+					bounds_y[i] = false;
+					if(perform_filling)fill_row(pixel_data_top,i,i,false,0);					
+				}
+				if(sum && !bounds_x[i])
+				{
+					bounds_y[i] = true;
+					if(perform_filling)fill_row(pixel_data_top,i,i,false,1);
+				}
+				if (!sum2 && bounds_z[i])
+				{
+					bounds_z[i] = false;
+					if(perform_filling)fill_row(pixel_data_front,i,i,false,0);
+				}
+				if (sum2 && !bounds_z[i])
+				{
+					bounds_z[i] = true;
+					if(perform_filling)fill_row(pixel_data_front,i,i,false,1);
+				}
+
+			}
+			break;
+		}
+
+		case 2:
+		{
+			for (int i = 0; i < windowWidth; i++)
+			{				
+				int sum = 0;
+				int sum2 = 0;
+				for(int j = 0; j < windowHeight; j++)
+				{
+					//cerr << i << " " << j<< endl;//debug
+					sum += pixel_data_top[xyTO1d(i,j)];
+					sum2 += pixel_data_top[xyTO1d(j,i)];
+					bounds_z[i] = true;
+				}
+				if (!sum && bounds_y[i])
+				{
+					bounds_y[i] = false;
+					if(perform_filling)fill_row(pixel_data_front,i,i,true,0);					
+				}
+				if(sum && !bounds_y[i])
+				{
+					bounds_y[i] = true;
+					if(perform_filling)fill_row(pixel_data_front,i,i,true,1);
+				}
+				if (!sum2 && bounds_x[i])
+				{
+					bounds_z[i] = false;
+					if(perform_filling)fill_row(pixel_data_side,i,i,true,0);
+				}
+				if (sum2 && !bounds_x[i])
+				{
+					bounds_z[i] = true;
+					if(perform_filling)fill_row(pixel_data_side,i,i,true,1);
+				}
+
+			}
+			break;
+		}
+
+		default: break;
+
+	}
+	
+}
+
 
 void fill_row(float *array,int start, int end , bool vertical, float value)
 {
@@ -401,20 +516,21 @@ void fill_row(float *array,int start, int end , bool vertical, float value)
 		for(int i = start; i <=end; i++ )
 			for(int j = 0; j< windowWidth; j++)
 				array[xyTO1d(j,i)] = value;
-				
+
 			//memset(&array[start],(int)value,(end - start));
 		}
 		else
 		{
 			for(int i = start; i <=end; i++ )
-			for(int j = 0; j< windowHeight; j++)
-				array[xyTO1d(i,j)] = value;
+				for(int j = 0; j< windowHeight; j++)
+					array[xyTO1d(i,j)] = value;
+			}
+
+
+
 		}
 
-
-
-	}
-
+/*
 void check_bounds(int x, int y)
 {
 
@@ -427,14 +543,46 @@ void check_bounds(int x, int y)
 	{
 		case 0:
 		{
+
+			if(!bounds_y[x])
+			{
+				if(!eraser)
+				{
+				bounds_y[x]=true;
+				fill_row(pixel_data_top,x,x,true,1);				
+				}
+			}
+			else
+			{
+				
+				if(eraser)
+				{
+					bool do_erase = true;
+					for(int i = 0; i < windowHeight; i++)
+					{				
+					//cerr << "loop " << i << " " << pixel_data_front[xyTO1d(i,y)] << endl;//debug		
+						if(pixel_data_front[xyTO1d(x,i)] == 1.0f)
+							{								
+								do_erase = false;break;
+							}
+					}			
+
+					if(do_erase)
+					{
+						//cerr << "do_erase"   << endl;//debug
+						fill_row(pixel_data_top,x,x,true,0);		
+						bounds_y[x]=false;
+					}
+							
+				}
+			}
 			
 			if(!bounds_z[y])
 			{
 				if(!eraser)
 				{
 				bounds_z[y]=true;
-				fill_row(pixel_data_side,y,y,false,1);
-				fill_row(pixel_data_top,y,y,true,1);
+				fill_row(pixel_data_side,y,y,false,1);				
 				}
 			}
 			else
@@ -461,8 +609,150 @@ void check_bounds(int x, int y)
 							
 				}
 			}
+			break;
+		}//case 0
 
-		}
+		case 1:
+		{
+
+			if(!bounds_x[x])
+			{
+				if(!eraser)
+				{
+				bounds_x[x]=true;
+				fill_row(pixel_data_top,x,x,false,1);				
+				}
+			}
+			else
+			{
+				
+				if(eraser)
+				{
+					bool do_erase = true;
+					for(int i = 0; i < windowHeight; i++)
+					{				
+					//cerr << "loop " << i << " " << pixel_data_front[xyTO1d(i,y)] << endl;//debug		
+						if(pixel_data_side[xyTO1d(x,i)] == 1.0f)
+							{								
+								do_erase = false;break;
+							}
+					}			
+
+					if(do_erase)
+					{
+						//cerr << "do_erase"   << endl;//debug
+						fill_row(pixel_data_top,x,x,false,0);		
+						bounds_x[x]=false;
+					}
+							
+				}
+			}
+			
+			if(!bounds_z[y])
+			{
+				if(!eraser)
+				{
+				bounds_z[y]=true;
+				fill_row(pixel_data_front,x,x,false,1);				
+				}
+			}
+			else
+			{
+				
+				if(eraser)
+				{
+					bool do_erase = true;
+					for(int i = 0; i < windowWidth; i++)
+					{				
+					//cerr << "loop " << i << " " << pixel_data_front[xyTO1d(i,y)] << endl;//debug		
+						if(pixel_data_side[xyTO1d(i,y)] == 1.0f)
+							{								
+								do_erase = false;break;
+							}
+					}			
+
+					if(do_erase)
+					{
+						//cerr << "do_erase"   << endl;//debug
+						fill_row(pixel_data_front,x,x,false,0);
+						bounds_z[y]=false;
+					}
+							
+				}
+			}
+			break;
+		}//case1
+
+		case 2:
+		{
+
+			if(!bounds_y[x])
+			{
+				if(!eraser)
+				{
+				bounds_y[x]=true;
+				fill_row(pixel_data_front,x,x,true,1);				
+				}
+			}
+			else
+			{
+				
+				if(eraser)
+				{
+					bool do_erase = true;
+					for(int i = 0; i < windowHeight; i++)
+					{				
+					//cerr << "loop " << i << " " << pixel_data_front[xyTO1d(i,y)] << endl;//debug		
+						if(pixel_data_top[xyTO1d(x,i)] == 1.0f)
+							{								
+								do_erase = false;break;
+							}
+					}			
+
+					if(do_erase)
+					{
+						//cerr << "do_erase"   << endl;//debug
+						fill_row(pixel_data_front,x,x,true,0);		
+						bounds_y[x]=false;
+					}
+							
+				}
+			}
+			
+			if(!bounds_x[y])
+			{
+				if(!eraser)
+				{
+				bounds_x[y]=true;
+				fill_row(pixel_data_side,y,y,true,1);				
+				}
+			}
+			else
+			{
+				
+				if(eraser)
+				{
+					bool do_erase = true;
+					for(int i = 0; i < windowWidth; i++)
+					{				
+					//cerr << "loop " << i << " " << pixel_data_front[xyTO1d(i,y)] << endl;//debug		
+						if(pixel_data_top[xyTO1d(i,y)] == 1.0f)
+							{								
+								do_erase = false;break;
+							}
+					}			
+
+					if(do_erase)
+					{
+						//cerr << "do_erase"   << endl;//debug
+						fill_row(pixel_data_side,y,y,true,0);
+						bounds_x[y]=false;
+					}
+							
+				}
+			}
+			break;
+		}//case2
 
 	default : break;
 
@@ -470,3 +760,60 @@ void check_bounds(int x, int y)
 	
 
 }//check_bounds
+*/
+
+void assign_pixel(int x, int y)
+{
+
+	float value = !eraser;
+
+	
+	//cerr << x<< '\t' << y << '\t' << xyTO1d(x,y) << endl;//debug
+
+	if ( (x < windowWidth) && (x >= 0) && (y >=0) && (y<windowHeight))
+	{
+
+		int pixelIndex = xyTO1d(x,y);
+		if(cur_view == 0)
+		{
+			//if(bound_lock)if(!bounds_z[y] || !bounds_y[x])return;
+			pixel_data_front[pixelIndex] =  value;
+		}
+
+		if(cur_view == 1)
+		{
+			//if(bound_lock)if(!bounds_x[x] || !bounds_z[y])return;
+			pixel_data_side[pixelIndex] =  value;
+		}
+
+		if(cur_view == 2)
+		{
+			//if(bound_lock)if(!bounds_x[y] || !bounds_y[x])return;
+			pixel_data_top[pixelIndex] =  value;
+		}
+
+		//check_bounds(x,y);
+	}
+
+	
+
+}
+
+void switch_to_view(int view)
+{
+
+//cout << "Would you like to fill rows? " << flush;
+//if(cin.get() == 'y'){row_filling_confirmation = true;};
+
+	//if(row_filling_confirmation)
+	//	scan_for_bounds(cur_view,false);
+	row_filling_confirmation = false;
+	//bound_lock = true;
+	cur_view = view;
+	switch(view){
+		case 0:glfwSetWindowTitle("Protrictorium. Front view");break;
+		case 1:glfwSetWindowTitle("Protrictorium. Side view");break;
+		case 2:glfwSetWindowTitle("Protrictorium. Top view");break;
+		default:break;
+	}
+}
